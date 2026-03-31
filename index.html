@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a73e8">
+<title>Barkod Tarayıcı</title>
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #f0f2f5; min-height: 100vh; }
+
+  /* ── SCAN EKRANI ── */
+  #scan-screen { display: flex; flex-direction: column; height: 100vh; }
+
+  #header {
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
+    color: white; padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  #header h1 { font-size: 20px; font-weight: 700; }
+  #header span { font-size: 26px; }
+
+  #camera-wrapper {
+    position: relative; flex: 1; background: #000; overflow: hidden;
+  }
+  #interactive { width: 100%; height: 100%; }
+  #interactive video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  #interactive canvas { display: none; }
+
+  #scan-line {
+    position: absolute; top: 50%; left: 10%; width: 80%; height: 3px;
+    background: linear-gradient(90deg, transparent, #ff3d00, transparent);
+    border-radius: 2px;
+    animation: scanAnim 2s ease-in-out infinite;
+    transform: translateY(-50%);
+  }
+  @keyframes scanAnim {
+    0%, 100% { top: 30%; opacity: 1; }
+    50% { top: 70%; opacity: 0.7; }
+  }
+
+  #scan-frame {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 220px; height: 220px;
+    border: 3px solid rgba(255,255,255,0.8);
+    border-radius: 16px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+  }
+  #scan-frame::before, #scan-frame::after,
+  #scan-frame span::before, #scan-frame span::after {
+    content: ""; position: absolute;
+    width: 28px; height: 28px; border-color: #1a73e8; border-style: solid;
+  }
+  #scan-frame::before  { top: -3px; left: -3px; border-width: 4px 0 0 4px; border-radius: 12px 0 0 0; }
+  #scan-frame::after   { top: -3px; right: -3px; border-width: 4px 4px 0 0; border-radius: 0 12px 0 0; }
+  #scan-frame span::before { bottom: -3px; left: -3px; border-width: 0 0 4px 4px; border-radius: 0 0 0 12px; }
+  #scan-frame span::after  { bottom: -3px; right: -3px; border-width: 0 4px 4px 0; border-radius: 0 0 12px 0; }
+
+  #status-bar {
+    background: #1a73e8; color: white;
+    padding: 14px 20px; text-align: center;
+    font-size: 15px; font-weight: 500;
+    min-height: 52px; display: flex; align-items: center; justify-content: center;
+  }
+  #status-bar.error { background: #d32f2f; }
+  #status-bar.success { background: #2e7d32; }
+
+  /* Manuel giriş */
+  #manual-row {
+    background: white; padding: 12px 16px;
+    display: flex; gap: 8px; align-items: center;
+    border-top: 1px solid #e0e0e0;
+  }
+  #manual-input {
+    flex: 1; padding: 10px 14px; border: 2px solid #e0e0e0;
+    border-radius: 10px; font-size: 15px; outline: none;
+    transition: border-color 0.2s;
+  }
+  #manual-input:focus { border-color: #1a73e8; }
+  #manual-btn {
+    background: #1a73e8; color: white; border: none;
+    padding: 10px 18px; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+
+  /* ── SONUÇ EKRANI ── */
+  #result-screen {
+    display: none; flex-direction: column;
+    min-height: 100vh; background: #f0f2f5;
+  }
+  #result-header {
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
+    color: white; padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  #back-btn {
+    background: rgba(255,255,255,0.2); border: none; color: white;
+    padding: 8px 14px; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  #result-header h2 { font-size: 18px; font-weight: 700; }
+
+  #product-card {
+    margin: 20px 16px; background: white;
+    border-radius: 20px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  }
+  #product-img-wrap {
+    background: #f8f9fa; display: flex;
+    align-items: center; justify-content: center;
+    height: 260px; overflow: hidden;
+  }
+  #product-img {
+    max-width: 100%; max-height: 260px;
+    object-fit: contain;
+  }
+  #no-img {
+    font-size: 72px; display: none;
+  }
+  #product-info { padding: 20px 24px 24px; }
+  #product-name {
+    font-size: 20px; font-weight: 700;
+    color: #1a1a1a; line-height: 1.4; margin-bottom: 16px;
+  }
+  #price-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+    border: 2px solid #4caf50; border-radius: 12px;
+    padding: 10px 18px; margin-bottom: 16px;
+  }
+  #price-badge .label { font-size: 13px; color: #388e3c; font-weight: 500; }
+  #price-badge .amount { font-size: 28px; font-weight: 800; color: #1b5e20; }
+  #barcode-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #f5f5f5; border-radius: 20px;
+    padding: 6px 14px; font-size: 13px; color: #666;
+  }
+
+  #scan-again-btn {
+    margin: 0 16px 24px; padding: 16px;
+    background: linear-gradient(135deg, #1a73e8, #0d47a1);
+    color: white; border: none; border-radius: 14px;
+    font-size: 17px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(26,115,232,0.4);
+    width: calc(100% - 32px);
+  }
+
+  /* Yükleniyor */
+  #loading {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; display: none;
+  }
+  .spinner {
+    width: 48px; height: 48px; border: 5px solid rgba(255,255,255,0.3);
+    border-top-color: white; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- TARAMA EKRANI -->
+<div id="scan-screen">
+  <div id="header">
+    <span>📦</span>
+    <h1>Barkod Tarayıcı</h1>
+  </div>
+
+  <div id="camera-wrapper">
+    <div id="interactive"></div>
+    <div id="scan-frame"><span></span></div>
+    <div id="scan-line"></div>
+  </div>
+
+  <div id="status-bar" id="status">📷 Kamerayı barkoda tutun</div>
+
+  <div id="manual-row">
+    <input id="manual-input" type="text" inputmode="numeric"
+           placeholder="Barkod numarası girin..." />
+    <button id="manual-btn">Ara</button>
+  </div>
+</div>
+
+<!-- SONUÇ EKRANI -->
+<div id="result-screen">
+  <div id="result-header">
+    <button id="back-btn">← Geri</button>
+    <h2>Ürün Detayı</h2>
+  </div>
+
+  <div id="product-card">
+    <div id="product-img-wrap">
+      <img id="product-img" src="" alt="Ürün fotoğrafı" />
+      <div id="no-img">📦</div>
+    </div>
+    <div id="product-info">
+      <div id="product-name"></div>
+      <div id="price-badge">
+        <span class="label">Fiyat</span>
+        <span class="amount" id="price-amount"></span>
+      </div><br>
+      <div id="barcode-chip">🔖 <span id="barcode-text"></span></div>
+    </div>
+  </div>
+
+  <button id="scan-again-btn">📷 Tekrar Tara</button>
+</div>
+
+<div id="loading"><div class="spinner"></div></div>
+
+<script>
+const PRODUCTS = {"0102017701984": {"name": "EMMA  KALİTELİ ŞİŞME", "price": 8750, "barcode": "0102017701984"}, "0102017701991": {"name": "JASMİNE KALİTELİ ŞİŞME", "price": 8750, "barcode": "0102017701991"}, "4003536376850": {"name": "GOLDEN LOVİTA DAMLA", "price": 990, "barcode": "4003536376850"}, "4890888000782": {"name": "ALİAS İÇİ DOLU  BEL BAG BEYAZ MOTORSUZ", "price": 4250, "barcode": "4890888000782"}, "4890888003127": {"name": "VIBRATING PENIS DEVELOPER (312BX)", "price": 4250, "barcode": "4890888003127"}, "4890888113543": {"name": "BISEXSUEL PROTEZ ZENCİ MOTORLU", "price": 4250, "barcode": "4890888113543"}, "4890888113659": {"name": "B/O PVC VIB.(PG78CFV-FL-BX)", "price": 4250, "barcode": "4890888113659"}, "4890888113680": {"name": "ROBOTİC BEL BAG MOT ZENCİ", "price": 4250, "barcode": "4890888113680"}, "4890888114755": {"name": "ULTRA4 IŞIKLI  VIBRATOR", "price": 3990, "barcode": "4890888114755"}, "4890888115783": {"name": "MAGIC FLESH PASSIONATE PUSSY", "price": 2990, "barcode": "4890888115783"}, "4890888116179": {"name": "THE PERFECT PUMP (2K472)", "price": 3900, "barcode": "4890888116179"}, "4890888116612": {"name": "ROBOTİK İÇİ BOŞ BEL BAG BEYAZ", "price": 4250, "barcode": "4890888116612"}, "4890888118142": {"name": "SEX COLLCTION (BW-012002)", "price": 3990, "barcode": "4890888118142"}, "4890888118586": {"name": "B/O PVC VIB.(SLIM REPLIKA)(2K711-BCD)", "price": 3990, "barcode": "4890888118586"}, "4890888118944": {"name": "B/O PVC VIB.(STUD REPLIKA )(2K747-BCD)", "price": 3990, "barcode": "4890888118944"}, "4890888120312": {"name": "INFLATABLE ELLE (20131)", "price": 3990, "barcode": "4890888120312"}, "4890888122705": {"name": "HOT HOLE POMPA (05-223)", "price": 3750, "barcode": "4890888122705"}, "4890888123313": {"name": "SOFTJELLY TIGHT PUSSY", "price": 3750, "barcode": "4890888123313"}, "4890888123832": {"name": "POWER PUMP 06-050-BX", "price": 3250, "barcode": "4890888123832"}, "4890888124303": {"name": "MOTORLU UZATMALI PREZERVATİF MTR.(1701-BCD)", "price": 1300, "barcode": "4890888124303"}, "4890888126574": {"name": "PVC AID (21-54CL-BCD)", "price": 700, "barcode": "4890888126574"}, "4890888127632": {"name": "PLASTIK PUMP (REDLINE)(BW-022037)", "price": 3990, "barcode": "4890888127632"}, "4890888304231": {"name": "HOLLOW EXTENDER İÇİ BOŞ BEL BAG MOTLU", "price": 4250, "barcode": "4890888304231"}, "4890888990328": {"name": "HOT BOX MOTORLU", "price": 4250, "barcode": "4890888990328"}, "4890888990403": {"name": "THUNDER PUMP (99040)", "price": 4250, "barcode": "4890888990403"}, "4890888990656": {"name": "B/O PVC VIB.KIT(ULTRAF SLEVEES (99065-BX)", "price": 3250, "barcode": "4890888990656"}, "4892503021400": {"name": "BG JOHN MOTORLU", "price": 6490, "barcode": "4892503021400"}, "4892503031157": {"name": "PEMBE TESTİSLİ JELLY JİGGLE", "price": 3990, "barcode": "4892503031157"}, "4892503048728": {"name": "MIGHTY TIGH TICKLER-2JK1629-8", "price": 3990, "barcode": "4892503048728"}, "4892503058055": {"name": "CUMFY CUSH PENİS YASTIK", "price": 6590, "barcode": "4892503058055"}, "4892503068504": {"name": "ANTONY THE WALL MOUNTER-2T2828-11", "price": 3990, "barcode": "4892503068504"}, "4892503080391": {"name": "HOT SHOTS ÇİFTLİ JAPON", "price": 8750, "barcode": "4892503080391"}, "4892503100488": {"name": "PERFECT ANCHOR ANAL VAJİNAL VİB", "price": 3990, "barcode": "4892503100488"}, "4892503101737": {"name": "ACORN OF LOVE 5\\\"", "price": 3990, "barcode": "4892503101737"}, "4892503109191": {"name": "PLAYFUL WIZ-FPBA319A00-001", "price": 3990, "barcode": "4892503109191"}, "4892503112375": {"name": "MATIRBATÖT TOP", "price": 3990, "barcode": "4892503112375"}, "6949123024910": {"name": "2 Lİ ZEVK TOPU SİYAH", "price": 1900, "barcode": "6949123024910"}, "6949123024927": {"name": "2 Lİ ZEVK TOPU MOR", "price": 1900, "barcode": "6949123024927"}, "6949123130376": {"name": "REEL FEEL 8 İNÇ-2VİB", "price": 3250, "barcode": "6949123130376"}, "6949123130383": {"name": "REEL FEEL 8,5 İNÇ-3VİB", "price": 3250, "barcode": "6949123130383"}, "6949123130390": {"name": "REEL FEEL 7,5  İNÇ-4VİB", "price": 3250, "barcode": "6949123130390"}, "6949123130413": {"name": "REEL FEEL 6,5 İNÇ-6VİB", "price": 3250, "barcode": "6949123130413"}, "6949123130420": {"name": "REEL FEEL 8 İNÇ-7VİB", "price": 3250, "barcode": "6949123130420"}, "6949123130437": {"name": "REEL FEEL 8 İNÇ-8VİB", "price": 3250, "barcode": "6949123130437"}, "6949123132035": {"name": "MAXIMIZER WORX VX1 361016-02", "price": 3250, "barcode": "6949123132035"}, "6952523242563": {"name": "LİSA  LOVE DOLL ŞİŞME", "price": 3450, "barcode": "6952523242563"}, "6952523242570": {"name": "ANGEL LOVE DOLL ŞİŞME", "price": 3450, "barcode": "6952523242570"}, "6952523242587": {"name": "JULY  LOVE DOLL ŞİŞME", "price": 3450, "barcode": "6952523242587"}, "6959532000566": {"name": "1609-SLEEVE", "price": 700, "barcode": "6959532000566"}, "6959532300802": {"name": "FANTASY VIBE (BW-001012", "price": 3250, "barcode": "6959532300802"}, "6959532300833": {"name": "FANTASY VIBE (BW-001024)", "price": 3250, "barcode": "6959532300833"}, "6959532300918": {"name": "FANTASY BW00103ZZ", "price": 3250, "barcode": "6959532300918"}, "6959532300956": {"name": "FANTASY VİBE BW 001036", "price": 3250, "barcode": "6959532300956"}, "6959532301014": {"name": "FANTASY BW.1063", "price": 3250, "barcode": "6959532301014"}, "6959532301748": {"name": "DOUBLE DONG BW-010057", "price": 3750, "barcode": "6959532301748"}, "6959532303421": {"name": "LITTLI BUTT BM-009096", "price": 4890, "barcode": "6959532303421"}, "6959532303445": {"name": "LIFELIKE PENİS BW.006036R", "price": 3450, "barcode": "6959532303445"}, "6959532303704": {"name": "INFLATABLE BALL BI.010098", "price": 3450, "barcode": "6959532303704"}, "6959532304114": {"name": "CL LADY BI 014038", "price": 3350, "barcode": "6959532304114"}, "6959532304831": {"name": "FAMELE HARNESS", "price": 3490, "barcode": "6959532304831"}, "6959532305043": {"name": "DISTORTION BW.038001", "price": 3490, "barcode": "6959532305043"}, "6959532306422": {"name": "DOUBLE DONG BW-010011G", "price": 3490, "barcode": "6959532306422"}, "6959532306873": {"name": "ULTRA PASS.HARNESS BW-022022", "price": 5300, "barcode": "6959532306873"}, "6959532306897": {"name": "ULTRA PASS.HARNESS BW-022024", "price": 5300, "barcode": "6959532306897"}, "6959532307863": {"name": "GRID SLEEVE BI-026200", "price": 700, "barcode": "6959532307863"}, "6959532308532": {"name": "C-STRING BI. 014072W", "price": 5990, "barcode": "6959532308532"}, "6959532308723": {"name": "SUPER STRAPLEES DILDO BI 014084", "price": 3490, "barcode": "6959532308723"}, "6959532309362": {"name": "SILICONE SLEEVE 4113", "price": 700, "barcode": "6959532309362"}, "6959532310818": {"name": "FANTASY BW001009", "price": 3250, "barcode": "6959532310818"}, "6959532311433": {"name": "NEW DONG DILDO  (BW-008018N)", "price": 3250, "barcode": "6959532311433"}, "6959532311518": {"name": "9146 PASSION LADY", "price": 3250, "barcode": "6959532311518"}, "6959532311631": {"name": "FANTASY BW001042", "price": 3250, "barcode": "6959532311631"}, "6959532311648": {"name": "PASSION LADY BM-009147", "price": 3250, "barcode": "6959532311648"}, "6959532311686": {"name": "DONG BW.008081", "price": 350, "barcode": "6959532311686"}, "6959532311693": {"name": "8081X-SUPER ROTA DONG", "price": 3250, "barcode": "6959532311693"}, "6959532311754": {"name": "FANTASY BW 001060", "price": 3250, "barcode": "6959532311754"}, "6959532312249": {"name": "ULTRA PASS. HARNESS BW-022028", "price": 5300, "barcode": "6959532312249"}, "6970260900300": {"name": "REAL SOFTEEPENİS LV 0911", "price": 3250, "barcode": "6970260900300"}, "6970260900317": {"name": "REAL SOFTEEPENİS LV 0912", "price": 3250, "barcode": "6970260900317"}, "6970260900324": {"name": "REAL SOFTEEPENİS LV 0913", "price": 3250, "barcode": "6970260900324"}, "6970260900461": {"name": "dr love bel bag kemeri", "price": 750, "barcode": "6970260900461"}, "6970260900485": {"name": "LÜKS FETİSH RİDER BEL BAG PENİS", "price": 5990, "barcode": "6970260900485"}, "6970260901130": {"name": "PET PUSSY  VAJİNA", "price": 3250, "barcode": "6970260901130"}, "6970260901277": {"name": "PENİS POMP MEN 361017-01", "price": 3200, "barcode": "6970260901277"}, "6970260901567": {"name": "KING-SIZED REALİSTİK DİLDO  UZUN LV2206", "price": 3250, "barcode": "6970260901567"}, "6970260901710": {"name": "REAL FEEL MOTORLU REALİSTİK  VL1006", "price": 3250, "barcode": "6970260901710"}, "6970260901734": {"name": "REAL FEEL MOTORLU REALİSTİK  VL1008", "price": 3250, "barcode": "6970260901734"}, "6970260901758": {"name": "REAL FEEL MOTORLU REALİSTİK  VL1016", "price": 3250, "barcode": "6970260901758"}, "6970260904933": {"name": "14 LONG DOUBLE ÇİFT TATAFLI LEZBİYEN", "price": 5750, "barcode": "6970260904933"}, "6970260905008": {"name": "UNİSEX HOLLOW İÇİ BOŞ MOTORLU LV3002", "price": 3990, "barcode": "6970260905008"}, "6970260905015": {"name": "UNİSEX HOLLOW İÇİ BOŞMOTORSUZ  LV3001", "price": 3990, "barcode": "6970260905015"}, "6970260905022": {"name": "UNİSEX HOLLOW İÇİ BOŞ MOTORLU ÇATAL VİB LV3004", "price": 4250, "barcode": "6970260905022"}, "6970260905039": {"name": "UNİSEX HOLLOW İÇİ BOŞ MOTORSUZ ÇATAL VİB LV3003", "price": 4250, "barcode": "6970260905039"}, "6970260905053": {"name": "UNİSEX HOLLOW İÇİ BOŞMOTORSUZÇATAL KALINLV3005", "price": 4250, "barcode": "6970260905053"}, "6970260909457": {"name": "NATURE COCK MOTORSUZ PENİS LV4015", "price": 3990, "barcode": "6970260909457"}, "6970260909471": {"name": "NATURE COCK MOTORSUZ PENİS LV4016", "price": 3490, "barcode": "6970260909471"}, "6970905740483": {"name": "PENIS SLEEVE KILIF - PS-01-ABCD", "price": 750, "barcode": "6970905740483"}, "8053629690864": {"name": "PET PUSSY  VAJİNA", "price": 3490, "barcode": "8053629690864"}, "8053629690871": {"name": "PET PUSSY  VAJİNA", "price": 3490, "barcode": "8053629690871"}, "8053629690918": {"name": "GİANNA MONROE KONŞAN ŞİŞME REALİSTİK", "price": 18990, "barcode": "8053629690918"}, "86994001490346": {"name": "JENNA ŞİŞME BEBEK (20138)", "price": 18900, "barcode": "86994001490346"}, "8680067431829": {"name": "ESPECİAL POUR HOMME EAU", "price": 990, "barcode": "8680067431829"}, "8680131841066": {"name": "ERKEKSİN", "price": 300, "barcode": "8680131841066"}, "8682169332868": {"name": "JOY KAYDIRICI VE MASAJ KREMİ", "price": 750, "barcode": "8682169332868"}, "8699313000306": {"name": "motorlu penis halkası", "price": 750, "barcode": "8699313000306"}, "8699401491016": {"name": "MALE MASTURBATOR -MINI CUP", "price": 1790, "barcode": "8699401491016"}, "8699401491023": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-15-1", "price": 2590, "barcode": "8699401491023"}, "8699401491030": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-15-2", "price": 2590, "barcode": "8699401491030"}, "8699401491047": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-15-3", "price": 2590, "barcode": "8699401491047"}, "8699401491054": {"name": "MALE MASTURBATOR ANAL CUP - FC-15-5", "price": 2590, "barcode": "8699401491054"}, "8699401491061": {"name": "MALE MASTURBATOR ANAL CUP - FC-15-6", "price": 2590, "barcode": "8699401491061"}, "8699401491078": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-14-1", "price": 2590, "barcode": "8699401491078"}, "8699401491085": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-14-2", "price": 2590, "barcode": "8699401491085"}, "8699401491092": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-14-3", "price": 2590, "barcode": "8699401491092"}, "8699401491108": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-14-5", "price": 2590, "barcode": "8699401491108"}, "8699401491115": {"name": "MALE MASTURBATOR BUSSY CUP - FC-03", "price": 4250, "barcode": "8699401491115"}, "8699401491122": {"name": "MALE MASTURBATOR MBQ CUP - FC-04", "price": 4250, "barcode": "8699401491122"}, "8699401491139": {"name": "MALE MASTURBATOR - MM-07", "price": 1990, "barcode": "8699401491139"}, "8699401491146": {"name": "MALE MASTURBATOR VAGİNA - MM-11", "price": 4750, "barcode": "8699401491146"}, "8699401491153": {"name": "MALE MASTURBATOR MINI - MM-23", "price": 1990, "barcode": "8699401491153"}, "8699401491160": {"name": "MALE MASTURBATOR VAGİNA - MM-61", "price": 4750, "barcode": "8699401491160"}, "8699401491177": {"name": "MALE MASTURBATOR VAGİNA - MM-59", "price": 4750, "barcode": "8699401491177"}, "8699401491184": {"name": "MALE MASTURBATOR VAGİNA - MM-62", "price": 4750, "barcode": "8699401491184"}, "8699401491191": {"name": "MALE MASTURBATOR VAGİNA - MM-67", "price": 7250, "barcode": "8699401491191"}, "8699401491207": {"name": "MALE MASTURBATOR GOVDE - MM-76", "price": 9500, "barcode": "8699401491207"}, "8699401491214": {"name": "PENIS SLEEVE HALKA - PR-07", "price": 990, "barcode": "8699401491214"}, "8699401491221": {"name": "PENIS SLEEVE HALKA - PR-15", "price": 1250, "barcode": "8699401491221"}, "8699401491252": {"name": "VIBRATOR ANAL - PM-01-C", "price": 4490, "barcode": "8699401491252"}, "8699401491269": {"name": "VIBRATOR ANAL - PM-01-U", "price": 4490, "barcode": "8699401491269"}, "8699401491320": {"name": "PENIS SLEEVE KILIF MOTORLU - PS-05", "price": 990, "barcode": "8699401491320"}, "8699401491344": {"name": "PENIS SLEEVE KILIF - PS-08-D", "price": 1250, "barcode": "8699401491344"}, "8699401491351": {"name": "", "price": 1200, "barcode": "8699401491351"}, "8699401491375": {"name": "PENIS PUMP MOTORLU - PP-08", "price": 3990, "barcode": "8699401491375"}, "8699401491399": {"name": "VIBRATOR VAGINA ISITICI - STH-01", "price": 700, "barcode": "8699401491399"}, "8699401491405": {"name": "PENIS SLEEVE HALKA MOTORLU - PR-23", "price": 1250, "barcode": "8699401491405"}, "8699401491412": {"name": "PENIS SLEEVE KILIF - PS-06", "price": 1250, "barcode": "8699401491412"}, "8699401491429": {"name": "VIBRATOR 2LI MOTOR - VE-05", "price": 1250, "barcode": "8699401491429"}, "8699401491436": {"name": "VIBRATOR TEKLI MOTOR- VE-08-A", "price": 1250, "barcode": "8699401491436"}, "8699401491443": {"name": "VIBRATOR - BL-03", "price": 1990, "barcode": "8699401491443"}, "8699401491450": {"name": "VIBRATOR - GSV-15", "price": 2100, "barcode": "8699401491450"}, "8699401491467": {"name": "VIBRATOR - GSV-05", "price": 2100, "barcode": "8699401491467"}, "8699401491474": {"name": "VIBRATOR KLITORIS - GSV-13", "price": 1250, "barcode": "8699401491474"}, "8699401491481": {"name": "VIBRATOR - GSV-04-A", "price": 2990, "barcode": "8699401491481"}, "8699401491498": {"name": "VIBRATOR - GSV-04-B", "price": 2990, "barcode": "8699401491498"}, "8699401491504": {"name": "VIBRATOR - GSV-04-C", "price": 2990, "barcode": "8699401491504"}, "8699401491511": {"name": "VIBRATOR - RV-01-A", "price": 5250, "barcode": "8699401491511"}, "8699401491528": {"name": "VIBRATOR - RV-01-B", "price": 5250, "barcode": "8699401491528"}, "8699401491535": {"name": "VIBRATOR - RV-04", "price": 5250, "barcode": "8699401491535"}, "8699401491542": {"name": "VIBRATOR - RV-05-A", "price": 5250, "barcode": "8699401491542"}, "8699401491559": {"name": "VIBRATOR - RV-05-B", "price": 5250, "barcode": "8699401491559"}, "8699401491566": {"name": "VIBRATOR KLITORIS MASAJ BUYUK - AV-06", "price": 4990, "barcode": "8699401491566"}, "8699401491573": {"name": "VIBRATOR KLITORIS MASAJ KUCUK - AV-09-A", "price": 2990, "barcode": "8699401491573"}, "8699401491580": {"name": "VIBRATOR KLITORIS MASAJ ORTA - AV-17-A", "price": 3890, "barcode": "8699401491580"}, "8699401491597": {"name": "VIBRATOR KLITORIS MASAJ ORTA - AV-17-B", "price": 3890, "barcode": "8699401491597"}, "8699401491603": {"name": "VIBRATOR BASLIGI - AVA-01", "price": 900, "barcode": "8699401491603"}, "8699401491610": {"name": "VIBRATOR BASLIGI - AVA-02-C", "price": 900, "barcode": "8699401491610"}, "8699401491627": {"name": "VIBRATOR BASLIGI - AVA-03-B", "price": 900, "barcode": "8699401491627"}, "8699401491634": {"name": "KEGEL 2Lİ ORGAZM TOPU - KB-01", "price": 1450, "barcode": "8699401491634"}, "8699401491641": {"name": "VIBRATOR - GSV-28", "price": 4250, "barcode": "8699401491641"}, "8699401491658": {"name": "VIBRATOR - GSV-29", "price": 4250, "barcode": "8699401491658"}, "8699401491665": {"name": "VIBRATOR - GSV-23-A", "price": 4250, "barcode": "8699401491665"}, "8699401491672": {"name": "VIBRATOR - GSV-80-B", "price": 4250, "barcode": "8699401491672"}, "8699401491689": {"name": "VIBRATOR - GSV-36", "price": 4250, "barcode": "8699401491689"}, "8699401491696": {"name": "VIBRATOR - GSV-24", "price": 4250, "barcode": "8699401491696"}, "8699401491702": {"name": "VIBRATOR MINI - GSV-03-C", "price": 1990, "barcode": "8699401491702"}, "8699401491719": {"name": "VIBRATOR MINI - GSV-03-A", "price": 1990, "barcode": "8699401491719"}, "8699401491726": {"name": "VIBRATOR MINI - GSV-03-E", "price": 1990, "barcode": "8699401491726"}, "8699401491733": {"name": "VIBRATOR MINI - GSV-03-B", "price": 1990, "barcode": "8699401491733"}, "8699401491757": {"name": "REALISTIC DILDO KUCUK - RD-01-S", "price": 4300, "barcode": "8699401491757"}, "8699401491764": {"name": "REALISTIC DILDO ORTA - RD-01-M", "price": 4400, "barcode": "8699401491764"}, "8699401491771": {"name": "REALISTIC DILDO BUYUK - RD-01-L", "price": 4600, "barcode": "8699401491771"}, "8699401491788": {"name": "REALISTIC DILDO - RD-08", "price": 3250, "barcode": "8699401491788"}, "8699401491795": {"name": "REALISTIC DILDO - RD-05", "price": 4750, "barcode": "8699401491795"}, "8699401491801": {"name": "REALISTIC DILDO XL - RD-03", "price": 4990, "barcode": "8699401491801"}, "8699401491818": {"name": "REALISTIC DILDO M - RD-04", "price": 4990, "barcode": "8699401491818"}, "8699401491825": {"name": "REALISTIC DILDO KING SIZE - RD-12", "price": 7990, "barcode": "8699401491825"}, "8699401491832": {"name": "REALISTIC DILDO ULTRA LUX - RD-09-L", "price": 9900, "barcode": "8699401491832"}, "8699401491849": {"name": "REALISTIC DILDO BEL.BAGL. - RD-13", "price": 4490, "barcode": "8699401491849"}, "8699401491856": {"name": "REALISTIC DILDO POMPALI - RD-14", "price": 4590, "barcode": "8699401491856"}, "8699401491863": {"name": "REALISTIC DILDO - RD-15", "price": 3250, "barcode": "8699401491863"}, "8699401491870": {"name": "REALISTIC DILDO - RD-16", "price": 3250, "barcode": "8699401491870"}, "8699401491887": {"name": "REALISTIC DILDO - RD-45", "price": 4590, "barcode": "8699401491887"}, "8699401491894": {"name": "REALISTIC DILDO - RD-46", "price": 4590, "barcode": "8699401491894"}, "8699401491917": {"name": "REALISTIC DILDO BAKIRE - RD-33", "price": 1490, "barcode": "8699401491917"}, "8699401491924": {"name": "REALISTIC DILDO - RD-32", "price": 3390, "barcode": "8699401491924"}, "8699401491931": {"name": "REALISTIC DILDO LEZIYEN - SO-07-B", "price": 6990, "barcode": "8699401491931"}, "8699401491948": {"name": "REALISTIC DILDO LEZBIYEN - SO-07-A", "price": 6990, "barcode": "8699401491948"}, "8699401491955": {"name": "ANAL PLUG METAL - MT-01-S", "price": 1200, "barcode": "8699401491955"}, "8699401491962": {"name": "ANAL PLUG RENKLI - AP-01-S", "price": 990, "barcode": "8699401491962"}, "8699401491979": {"name": "ANAL PLUG TOMBUL - AP-23-S", "price": 990, "barcode": "8699401491979"}, "8699401491986": {"name": "ANAL PLUG UZUN - AP-05-S", "price": 990, "barcode": "8699401491986"}, "8699401491993": {"name": "ANAL PLUG - AP-06-B", "price": 990, "barcode": "8699401491993"}, "8699401492006": {"name": "ANAL PLUG - AP-06-C", "price": 990, "barcode": "8699401492006"}, "8699401492013": {"name": "ANAL PLUG - AP-06-D", "price": 990, "barcode": "8699401492013"}, "8699401492020": {"name": "ANAL PLUG MOTORLU - AP-09V", "price": 1200, "barcode": "8699401492020"}, "8699401492037": {"name": "ANAL PLUG MOTORLU - AP-20-L", "price": 1990, "barcode": "8699401492037"}, "8699401492044": {"name": "ANAL PLUG BONCUK - AP-15", "price": 990, "barcode": "8699401492044"}, "8699401492051": {"name": "BONDAGE FETISH SET - BK-22-A", "price": 3290, "barcode": "8699401492051"}, "8699401492068": {"name": "VIBRATOR TEKLİ MOTOR - VE-06", "price": 1100, "barcode": "8699401492068"}, "8699401492075": {"name": "VIBRATOR DOLPHIN VIBE - DV-01", "price": 1990, "barcode": "8699401492075"}, "8699401492082": {"name": "VIBRATOR - BV-02", "price": 2250, "barcode": "8699401492082"}, "8699401492099": {"name": "VIBRATOR - BV-08", "price": 2350, "barcode": "8699401492099"}, "8699401492105": {"name": "GÖĞÜS POMPASI - NV-03-L", "price": 2990, "barcode": "8699401492105"}, "8699401492112": {"name": "VIBRATOR - RV-03", "price": 5250, "barcode": "8699401492112"}, "8699401492129": {"name": "VIBRATOR KLİTORİS MASAJ ORTA - GSV-55", "price": 3290, "barcode": "8699401492129"}, "8699401492136": {"name": "VIBRATOR KLİTORİS MASAJ ORTA - AV-11", "price": 3290, "barcode": "8699401492136"}, "8699401492143": {"name": "VIBRATOR KLİTORİS MASAJ KÜÇÜK - AV-12", "price": 1590, "barcode": "8699401492143"}, "8699401492150": {"name": "VIBRATOR - GSV-23-B", "price": 4250, "barcode": "8699401492150"}, "8699401492167": {"name": "VIBRATOR - GSV-12-B", "price": 5250, "barcode": "8699401492167"}, "8699401492174": {"name": "VIBRATOR - GSV-80-A", "price": 4250, "barcode": "8699401492174"}, "8699401492181": {"name": "VIBRATOR - GSV-16", "price": 4390, "barcode": "8699401492181"}, "8699401492198": {"name": "VIBRATOR MINI - GSV-03-D", "price": 1990, "barcode": "8699401492198"}, "8699401492204": {"name": "VIBRATOR MINI - GSV-03-F", "price": 1990, "barcode": "8699401492204"}, "8699401492211": {"name": "VIBRATOR - GSV-135", "price": 3590, "barcode": "8699401492211"}, "8699401492228": {"name": "VİRATÖR GSV-89", "price": 3590, "barcode": "8699401492228"}, "8699401492235": {"name": "VIBRATOR - GSV-31", "price": 7990, "barcode": "8699401492235"}, "8699401492242": {"name": "VIBRATOR - GSV-106", "price": 11990, "barcode": "8699401492242"}, "8699401492259": {"name": "REALISTIC DILDO - RD-02", "price": 4350, "barcode": "8699401492259"}, "8699401492280": {"name": "REALISTIC DILDO XXLARGE - RD-11", "price": 7750, "barcode": "8699401492280"}, "8699401492303": {"name": "REALISTIC DILDO - RD-61", "price": 5450, "barcode": "8699401492303"}, "8699401492310": {"name": "REALISTIC DILDO - RD-35-S", "price": 4200, "barcode": "8699401492310"}, "8699401492327": {"name": "REALISTIC DILDO - RD-35-M", "price": 4400, "barcode": "8699401492327"}, "8699401492334": {"name": "REALISTIC DILDO - RD-35-L", "price": 4600, "barcode": "8699401492334"}, "8699401492341": {"name": "REALISTIC DILDO ÇİFT TARAFLI - RD-31-L", "price": 4990, "barcode": "8699401492341"}, "8699401492358": {"name": "REALISTIC DILDO - RD-25-S", "price": 4990, "barcode": "8699401492358"}, "8699401492365": {"name": "REALISTIC DILDO - RD-50-M", "price": 3250, "barcode": "8699401492365"}, "8699401492372": {"name": "REALISTIC DILDO -  RD-43", "price": 3250, "barcode": "8699401492372"}, "8699401492389": {"name": "REALISTIC DILDO - RD-51", "price": 5250, "barcode": "8699401492389"}, "8699401492433": {"name": "ANAL PLUG RENKLI - AP-01-M", "price": 990, "barcode": "8699401492433"}, "8699401492457": {"name": "ANAL PLUG - AP-38-L", "price": 990, "barcode": "8699401492457"}, "8699401492464": {"name": "ANAL PLUG KUYRUKLU - GT-04-S", "price": 2250, "barcode": "8699401492464"}, "8699401492488": {"name": "ANAL TEMİZLEYİCİ POMPA - ET-02-L", "price": 1250, "barcode": "8699401492488"}, "8699401492495": {"name": "PENIS RING REALİSTİK KILIF PS-02", "price": 1200, "barcode": "8699401492495"}, "8699401492525": {"name": "PENIS RING REALİSTİK KILIF - PS-10-B", "price": 1200, "barcode": "8699401492525"}, "8699401492532": {"name": "PENIS RING REALİSTİK KILIF - PS-11-A", "price": 1490, "barcode": "8699401492532"}, "8699401492549": {"name": "PENIS RING REALİSTİK KILIF - PS-11-B", "price": 1490, "barcode": "8699401492549"}, "8699401492556": {"name": "PENİS RING REALİTİK KILIF PS-24-V", "price": 1490, "barcode": "8699401492556"}, "8699401492563": {"name": "PENIS RING REALİSTİK KILIF - PS-26-V", "price": 1490, "barcode": "8699401492563"}, "8699401492570": {"name": "PENIS RING REALİSTİK KILIF - PS-27-V", "price": 1490, "barcode": "8699401492570"}, "8699401492587": {"name": "PENIS RING REALİSTİK KILIF - PS-28-V", "price": 1490, "barcode": "8699401492587"}, "8699401492594": {"name": "PENIS RING KILIF MOTORLU - PS-09V", "price": 4250, "barcode": "8699401492594"}, "8699401492600": {"name": "PENIS PUMP + MASTURBATOR PP-01", "price": 1200, "barcode": "8699401492600"}, "8699401492617": {"name": "PENIS PUMP DİJİTAL - PP-12", "price": 5990, "barcode": "8699401492617"}, "8699401492624": {"name": "PENIS PUMP OTOMATİK - PP-06", "price": 5990, "barcode": "8699401492624"}, "8699401492631": {"name": "MALE MASTURBATOR ANAL CUP - FC-15-7", "price": 2590, "barcode": "8699401492631"}, "8699401492648": {"name": "MALE MASTURBATOR VAGİNA CUP - FC-14-4", "price": 2590, "barcode": "8699401492648"}, "8699401492655": {"name": "MALE MASTURBATOR VAGİNA TİTREŞİMLİ - FC-11", "price": 5490, "barcode": "8699401492655"}, "8699401492662": {"name": "MALE MASTURBATOR - MM-12", "price": 4990, "barcode": "8699401492662"}, "8699401492679": {"name": "MALE MASTURBATOR + LUX DILDO - MM-81", "price": 6990, "barcode": "8699401492679"}, "8699401492686": {"name": "MALE MASTURBATOR BUYUK GOVDE - MM-87", "price": 16990, "barcode": "8699401492686"}, "8699401492693": {"name": "ANAL PLUG - AP-06-A", "price": 990, "barcode": "8699401492693"}, "8699401492709": {"name": "ANAL PLUG - AP-02-A", "price": 990, "barcode": "8699401492709"}, "8699401492716": {"name": "ANAL PLUG - AP-29-C", "price": 990, "barcode": "8699401492716"}, "8699401492723": {"name": "ANAL PLUG - AP-02-C", "price": 990, "barcode": "8699401492723"}, "8699401492730": {"name": "ANAL PLUG - AP-02-D", "price": 990, "barcode": "8699401492730"}, "8699401492747": {"name": "ANAL PLUG - AP-29-A", "price": 990, "barcode": "8699401492747"}, "8699401492754": {"name": "ANAL PLUG - AP-29-B", "price": 990, "barcode": "8699401492754"}, "8699401492761": {"name": "ANAL PLUG - AP-02-B", "price": 990, "barcode": "8699401492761"}, "8699401492778": {"name": "ANAL PLUG - AP-29-D", "price": 990, "barcode": "8699401492778"}, "8699401492785": {"name": "ANAL PLUG - AP-33-A", "price": 990, "barcode": "8699401492785"}, "8699401492792": {"name": "ANAL PLUG - AP-33-B", "price": 990, "barcode": "8699401492792"}, "8699401492808": {"name": "ANAL PLUG - AP-33-C", "price": 990, "barcode": "8699401492808"}, "8699401492815": {"name": "ANAL PLUG - AP-33-D", "price": 990, "barcode": "8699401492815"}, "8699401492822": {"name": "ANAL PLUG - AP-33-E", "price": 990, "barcode": "8699401492822"}, "8699401492839": {"name": "ANAL PLUG - AP-33-F", "price": 990, "barcode": "8699401492839"}, "8699401492846": {"name": "ANAL PLUG - AP-05-M", "price": 990, "barcode": "8699401492846"}, "8699401492853": {"name": "ANAL PLUG - AP-05-L", "price": 990, "barcode": "8699401492853"}, "8699401492860": {"name": "ANAL PLUG - AP-05-XL", "price": 2490, "barcode": "8699401492860"}, "8699401492877": {"name": "ANAL PLUG METAL - MT-01-M", "price": 1300, "barcode": "8699401492877"}, "8699401492884": {"name": "ANAL PLUG METAL - MT-01-L", "price": 1400, "barcode": "8699401492884"}, "8699401492891": {"name": "FETİSH YATAK KELEPÇE SETİ", "price": 2990, "barcode": "8699401492891"}, "8699401492945": {"name": "BELDEN BAGLAMA KEMERİ", "price": 750, "barcode": "8699401492945"}, "8699401492952": {"name": "G-SPOT STIMULATOR BI 014038N", "price": 3490, "barcode": "8699401492952"}, "8699401492969": {"name": "VİBRATÖR BW.001002", "price": 3750, "barcode": "8699401492969"}, "8699401492976": {"name": "VARIABLE SPEED VİB BW001005", "price": 3750, "barcode": "8699401492976"}, "8699401492983": {"name": "UZATMALI PRO TİP EXIENDER 76003", "price": 3590, "barcode": "8699401492983"}, "8699401492990": {"name": "GİANNA MONROE KONŞAN ŞİŞME REALİSTİK", "price": 18990, "barcode": "8699401492990"}, "8699401493003": {"name": "BİG BABE BELLA  ŞİŞME", "price": 2250, "barcode": "8699401493003"}, "8699401493010": {"name": "ANAL TIKAÇ BÜYÜK", "price": 1690, "barcode": "8699401493010"}, "8699401493027": {"name": "ANAL TIKAÇ KÜÇÜK", "price": 1200, "barcode": "8699401493027"}, "8699401493034": {"name": "SOLDIER PENİS POMP", "price": 1200, "barcode": "8699401493034"}, "8699401493041": {"name": "CHIRISTINA LOVE DOLL (020136)", "price": 5250, "barcode": "8699401493041"}, "8699401493058": {"name": "ANGELA ŞİŞME (020133)", "price": 5250, "barcode": "8699401493058"}, "8699401493065": {"name": "SEXUALLADY PUSSY (BM-009009)", "price": 4450, "barcode": "8699401493065"}, "8699401493072": {"name": "BEAUTIFUL GIRL PUSSY (BM-009002N)", "price": 3490, "barcode": "8699401493072"}, "8699401493096": {"name": "ULTRA PASSIONATE HARNES İNCE (BW-022034)", "price": 3490, "barcode": "8699401493096"}, "8699401493119": {"name": "MASTURBATOR (BM-009006NJ)", "price": 3490, "barcode": "8699401493119"}, "8699401493126": {"name": "SEXUALLADY PUSSY (BM-009012)", "price": 3990, "barcode": "8699401493126"}, "8699401493133": {"name": "PRERY BABY (BM-041001)", "price": 3490, "barcode": "8699401493133"}, "8699401493140": {"name": "PRERY BABY (BM-041004)", "price": 3490, "barcode": "8699401493140"}, "8699401493157": {"name": "PRERY BABY (BM-041006)", "price": 3490, "barcode": "8699401493157"}, "8699401493164": {"name": "THE REAL COCK MAVİ(BW-027003)", "price": 3490, "barcode": "8699401493164"}, "8699401493188": {"name": "FANTASY WAVES (BW-1063)", "price": 3490, "barcode": "8699401493188"}, "8699401493195": {"name": "LOVEDIGGER BEYAZ(BW-001025F)", "price": 3490, "barcode": "8699401493195"}, "8699401493201": {"name": "ULTRA PASSIONATE HARNES (BW-022026)", "price": 3490, "barcode": "8699401493201"}, "8699401493218": {"name": "THE REALISTIC COCK (BW-047002)", "price": 3490, "barcode": "8699401493218"}, "8699401493225": {"name": "SEX COLLCTION (BW-012004) 5 Lİ PEMBE", "price": 3490, "barcode": "8699401493225"}, "8699401493232": {"name": "ULTRA PASSIONATE (BW-008013)", "price": 3490, "barcode": "8699401493232"}, "8699401493249": {"name": "ULTRA CYBERSKIN PENIS (BW-022019)", "price": 3590, "barcode": "8699401493249"}, "8699401493256": {"name": "FANTASY REAL BÜYÜK (BM-001009)", "price": 3590, "barcode": "8699401493256"}, "8699401493263": {"name": "FANTASY WAVES (BW-0081012)", "price": 3590, "barcode": "8699401493263"}, "8699401493270": {"name": "SEX COLLECTION BW-012004", "price": 3590, "barcode": "8699401493270"}, "8699401493287": {"name": "FANTASY VAVES  (BW-001032)", "price": 3590, "barcode": "8699401493287"}, "8699401493294": {"name": "FANTASY WAVES VIB.(BW-00001042)", "price": 3590, "barcode": "8699401493294"}, "8699401493300": {"name": "VARIABLE SPEED VIB.BW-0010005", "price": 3590, "barcode": "8699401493300"}, "8699401493317": {"name": "FANTASY PLEASUR BW-01060", "price": 3590, "barcode": "8699401493317"}, "8699401493324": {"name": "THE REALISTIC COCK (BW-047001)", "price": 3590, "barcode": "8699401493324"}, "8699401493331": {"name": "THE REALISTIC COCK (BW-048002)", "price": 3590, "barcode": "8699401493331"}, "8699401493348": {"name": "FANTASY WAVES VIB.(BW-007013)", "price": 3590, "barcode": "8699401493348"}, "8699401493355": {"name": "THE REALISTIC COCK (BW-027010)", "price": 3590, "barcode": "8699401493355"}, "8699401493362": {"name": "THE REALISTIC COCK (BW-027006)", "price": 3590, "barcode": "8699401493362"}, "8699401493379": {"name": "REALISTIC COOK MOR B(BW-001082)", "price": 3590, "barcode": "8699401493379"}, "8699401493386": {"name": "SLEEVE KUTULU(BI-010045H)", "price": 990, "barcode": "8699401493386"}, "8699401493393": {"name": "JENNA ŞİŞME BEBEK (20138)", "price": 18900, "barcode": "8699401493393"}, "8699401493409": {"name": "JESSICA ŞİŞME BEBEK (20137)", "price": 19900, "barcode": "8699401493409"}, "8699401493416": {"name": "SPECIAL TECHNICAL TROOPS BW-008018A", "price": 5250, "barcode": "8699401493416"}, "8699401493423": {"name": "G-SPOT VIBE BW-006009", "price": 3490, "barcode": "8699401493423"}, "8699401493430": {"name": "DERİ KIRBAÇ", "price": 700, "barcode": "8699401493430"}, "8699401493447": {"name": "BİLEK KELEPÇE", "price": 700, "barcode": "8699401493447"}, "8699401493454": {"name": "BRILLIANT JELY (BW-034002C)", "price": 3490, "barcode": "8699401493454"}, "8699401493461": {"name": "NEW REALISTIC (BW-027015)", "price": 3490, "barcode": "8699401493461"}, "8699401493478": {"name": "NEW REALISTIC MAVİ (BW-027003)", "price": 3490, "barcode": "8699401493478"}, "8699401493485": {"name": "NEW REALISTIC PEMBE (BW-027001)", "price": 3490, "barcode": "8699401493485"}, "8699401493492": {"name": "NEW REALISTIC BEYAZ (BW-027004)", "price": 3490, "barcode": "8699401493492"}, "8699401493508": {"name": "NORTH AMERICA (BI-034001A)", "price": 3490, "barcode": "8699401493508"}, "8699401493515": {"name": "BENDABLE VIBRATOR (BW)007104G)", "price": 3490, "barcode": "8699401493515"}, "8699401493522": {"name": "THE REALISTIC COCK TEN (BW-027017)", "price": 3490, "barcode": "8699401493522"}, "8699401493539": {"name": "ROCK CANDY (BW-027034)", "price": 3490, "barcode": "8699401493539"}, "8699401493553": {"name": "PRIME REALISTIC DONG(BW-008055)", "price": 3490, "barcode": "8699401493553"}, "8699401493560": {"name": "LOVE COMPANION BW007012F", "price": 3490, "barcode": "8699401493560"}, "8699401493607": {"name": "VİBRATÖR BW.001033", "price": 3490, "barcode": "8699401493607"}, "8699401493621": {"name": "MASKE TEK", "price": 700, "barcode": "8699401493621"}, "8699401493638": {"name": "ağız topu 8699401493638", "price": 700, "barcode": "8699401493638"}, "8699401493645": {"name": "THE REALISTIC COCK (BW-027019)", "price": 3490, "barcode": "8699401493645"}, "8699401493652": {"name": "THE REALISTIC COCK PEMBE(BW-047001)", "price": 3690, "barcode": "8699401493652"}, "8699401493669": {"name": "ULTRA HARNES(BW-022038)", "price": 4300, "barcode": "8699401493669"}, "8699401493683": {"name": "ROMEO KLİTORAL UYARICI", "price": 990, "barcode": "8699401493683"}, "8699401493690": {"name": "THE REALISTIC COCK K.PEMBE(BW-027018)", "price": 3490, "barcode": "8699401493690"}, "8699401491313": {"name": "TİTREŞİMLİ PENİS KILIFI", "price": 1250, "barcode": "8699401491313"}, "8699401493713": {"name": "PASSION BW.062002-1", "price": 3490, "barcode": "8699401493713"}, "8699401493720": {"name": "TWINS EGG LOVER BI. 0140047-3", "price": 3490, "barcode": "8699401493720"}, "8699401493737": {"name": "KÜÇÜK ÇATAL VIBRATÖR", "price": 3490, "barcode": "8699401493737"}, "8699401493744": {"name": "BG MAN BW.008016", "price": 6590, "barcode": "8699401493744"}, "8699401494024": {"name": "REALİSTİK PEMBE VE TEN RENGİ  PENİS MOTORLU", "price": 3990, "barcode": "8699401494024"}, "8699401494031": {"name": "FETİSH YATAK  EL AYAK KELEPÇESİ", "price": 2590, "barcode": "8699401494031"}, "8699401494055": {"name": "DR.LOVE KING POWER PENIS POMP", "price": 1200, "barcode": "8699401494055"}, "8699401494062": {"name": "DR.LOVE DIAMOND PENIS POMP", "price": 1200, "barcode": "8699401494062"}, "8699401494079": {"name": "DR.LOVE CLASSIC PENIS POMP", "price": 1200, "barcode": "8699401494079"}, "8699401494086": {"name": "DR.LOVE PENIS PUMP MEN", "price": 1200, "barcode": "8699401494086"}, "8699401494840": {"name": "DR.LOVE MEN EXTENDER PENİS POMP", "price": 1200, "barcode": "8699401494840"}, "8699401494093": {"name": "PENIS PUMP OTOMATİK - PP-06-02", "price": 6250, "barcode": "8699401494093"}, "8699401495519": {"name": "DR.LOVE PASSION PENIS POMP", "price": 3750, "barcode": "8699401495519"}, "8699401495526": {"name": "DR.LOVE POWERUP MEN PENIS POMP", "price": 5990, "barcode": "8699401495526"}, "8699401495533": {"name": "DR.LOVE LCD DISPLAY PENIS POMP", "price": 5990, "barcode": "8699401495533"}, "8699401495045": {"name": "DR.LOVE REALISTIC DILDO - QLOVES006", "price": 5350, "barcode": "8699401495045"}, "8699401495021": {"name": "DR.LOVE REALISTIC DILDO - CHGD013", "price": 5350, "barcode": "8699401495021"}, "8699401494963": {"name": "DR.LOVE REALISTIC DILDO - G310", "price": 9900, "barcode": "8699401494963"}, "8699401494970": {"name": "DR.LOVE REALISTIC DILDO - G043", "price": 4990, "barcode": "8699401494970"}, "8699401494987": {"name": "DR.LOVE CATAL VIBRATOR - G337", "price": 7590, "barcode": "8699401494987"}, "8699401494994": {"name": "DR.LOVE ANAL VIBRATOR - G339", "price": 7590, "barcode": "8699401494994"}, "8699401494956": {"name": "DR.LOVE REALISTIC DILDO - G308", "price": 9900, "barcode": "8699401494956"}, "8699401494949": {"name": "DR.LOVE REALISTIC DILDO - G306", "price": 9900, "barcode": "8699401494949"}, "8699401495014": {"name": "DR.LOVE REALISTIC DILDO - G309", "price": 9900, "barcode": "8699401495014"}, "8699401494895": {"name": "DR.LOVE VIBRATOR - VE09", "price": 3990, "barcode": "8699401494895"}, "8699401494871": {"name": "DR.LOVE EMICI VIBRATOR - GSV47", "price": 3990, "barcode": "8699401494871"}, "8699401494901": {"name": "DR.LOVE ANAL PLUG METAL - HT24", "price": 1200, "barcode": "8699401494901"}, "8699401494918": {"name": "DR.LOVE HALKALI VIBRATOR - PS20", "price": 4750, "barcode": "8699401494918"}, "8699401494925": {"name": "DR.LOVE HALKALI VIBRATOR - PS21", "price": 4750, "barcode": "8699401494925"}, "8699401494932": {"name": "DR.LOVE VIBRATOR - G303", "price": 4250, "barcode": "8699401494932"}, "8699401495038": {"name": "DR.LOVE REALISTIC DILDO - CHGD025", "price": 5490, "barcode": "8699401495038"}, "8699401494888": {"name": "DR.LOVE VIBRATOR - GSV07", "price": 5750, "barcode": "8699401494888"}, "8699401494864": {"name": "DR.LOVE VIBRATOR - GSV70", "price": 5990, "barcode": "8699401494864"}, "8699401494109": {"name": "YIWU REALISTIC DILDO - XM204", "price": 4790, "barcode": "8699401494109"}, "8699401494116": {"name": "YIWU REALISTIC DILDO - XM206", "price": 4690, "barcode": "8699401494116"}, "8699401494123": {"name": "YIWU REALISTIC DILDO - XM208", "price": 4690, "barcode": "8699401494123"}, "8699401494130": {"name": "YIWU REALISTIC DILDO - XM241", "price": 4690, "barcode": "8699401494130"}, "8699401494147": {"name": "YIWU REALISTIC DILDO - XM223", "price": 4690, "barcode": "8699401494147"}, "8699401494154": {"name": "YIWU REALISTIC DILDO - XM258", "price": 4690, "barcode": "8699401494154"}, "8699401494161": {"name": "YIWU REALISTIC DILDO - XM259", "price": 4990, "barcode": "8699401494161"}, "8699401494178": {"name": "YIWU REALISTIC DILDO - XM261", "price": 4990, "barcode": "8699401494178"}, "8699401494185": {"name": "YIWU REALISTIC DILDO - XM268", "price": 5750, "barcode": "8699401494185"}, "8699401494192": {"name": "YIWU REALISTIC DILDO - XM269", "price": 5750, "barcode": "8699401494192"}, "8699401494208": {"name": "YIWU REALISTIC DILDO - XM270", "price": 5750, "barcode": "8699401494208"}, "8699401494215": {"name": "YIWU REALISTIC DILDO - XM207", "price": 4690, "barcode": "8699401494215"}, "8699401494222": {"name": "YIWU REALISTIC DILDO - XM209", "price": 4990, "barcode": "8699401494222"}, "8699401494239": {"name": "YIWU REALISTIC DILDO - XM210", "price": 4990, "barcode": "8699401494239"}, "8699401494246": {"name": "YIWU REALISTIC DILDO - XM212", "price": 4490, "barcode": "8699401494246"}, "8699401494253": {"name": "YIWU REALISTIC DILDO - XM214", "price": 3490, "barcode": "8699401494253"}, "8699401494260": {"name": "YIWU REALISTIC DILDO - XM222", "price": 4390, "barcode": "8699401494260"}, "8699401494277": {"name": "YIWU REALISTIC DILDO - XM226", "price": 4390, "barcode": "8699401494277"}, "8699401494284": {"name": "YIWU REALISTIC DILDO - XM229", "price": 4390, "barcode": "8699401494284"}, "8699401494291": {"name": "YIWU REALISTIC DILDO - XM232", "price": 4990, "barcode": "8699401494291"}, "8699401494307": {"name": "YIWU REALISTIC DILDO - XM234", "price": 4990, "barcode": "8699401494307"}, "8699401494314": {"name": "YIWU REALISTIC DILDO - XM235", "price": 4990, "barcode": "8699401494314"}, "8699401494321": {"name": "YIWU REALISTIC DILDO - XM236", "price": 4990, "barcode": "8699401494321"}, "8699401494338": {"name": "YIWU REALISTIC DILDO - XM242", "price": 4490, "barcode": "8699401494338"}, "8699401494345": {"name": "YIWU REALISTIC DILDO - XM252", "price": 2490, "barcode": "8699401494345"}, "8699401494352": {"name": "YIWU REALISTIC DILDO - XM257", "price": 4290, "barcode": "8699401494352"}, "8699401494369": {"name": "YIWU REALISTIC DILDO - XM265", "price": 5250, "barcode": "8699401494369"}, "8699401494376": {"name": "YIWU REALISTIC DILDO - XM266", "price": 4990, "barcode": "8699401494376"}, "8699401494383": {"name": "YIWU REALISTIC DILDO - XM267", "price": 4990, "barcode": "8699401494383"}, "8699401494390": {"name": "YIWU REALISTIC DILDO - XM273", "price": 7750, "barcode": "8699401494390"}, "8699401494406": {"name": "YIWU REALISTIC DILDO - XM277", "price": 5250, "barcode": "8699401494406"}, "8699401494413": {"name": "YIWU REALISTIC DILDO - XM285", "price": 7250, "barcode": "8699401494413"}, "8699401494420": {"name": "YIWU MASTURBATOR VAGİNA - XM1003", "price": 3490, "barcode": "8699401494420"}, "8699401494437": {"name": "YIWU MASTURBATOR VAGİNA - XM1004", "price": 3490, "barcode": "8699401494437"}, "8699401494444": {"name": "YIWU MASTURBATOR VAGİNA - XM1014", "price": 3990, "barcode": "8699401494444"}, "8699401494451": {"name": "YIWU MASTURBATOR VAGİNA - XM1261", "price": 4990, "barcode": "8699401494451"}, "8699401494468": {"name": "YIWU MASTURBATOR VAGİNA - XM1304", "price": 6490, "barcode": "8699401494468"}, "8699401494475": {"name": "YIWU MASTURBATOR GOVDE - XM1601", "price": 8750, "barcode": "8699401494475"}, "8699401494482": {"name": "YIWU MASTURBATOR VAGİNA - XM1006", "price": 3200, "barcode": "8699401494482"}, "8699401494499": {"name": "YIWU MASTURBATOR VAGİNA - XM1007", "price": 3200, "barcode": "8699401494499"}, "8699401494505": {"name": "YIWU MASTURBATOR GOVDE - XM1210", "price": 5690, "barcode": "8699401494505"}, "8699401494512": {"name": "YIWU MASTURBATOR VAGİNA - XM1312", "price": 6250, "barcode": "8699401494512"}, "8699401494529": {"name": "YIWU MASTURBATOR VAGİNA - XM1315", "price": 6250, "barcode": "8699401494529"}, "8699401494536": {"name": "YIWU MASTURBATOR VAGİNA - XM1318", "price": 14990, "barcode": "8699401494536"}, "8699401494543": {"name": "YIWU MASTURBATOR GOVDE - XM1605", "price": 17000, "barcode": "8699401494543"}, "8699401494550": {"name": "YIWU MASTURBATOR GOVDE - XM1651", "price": 23990, "barcode": "8699401494550"}, "8699401495052": {"name": "JULIA 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3250, "barcode": "8699401495052"}, "8699401495069": {"name": "KATYA 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3250, "barcode": "8699401495069"}, "8699401495076": {"name": "ALICE 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3250, "barcode": "8699401495076"}, "8699401495083": {"name": "VALERIA 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3250, "barcode": "8699401495083"}, "8699401495090": {"name": "LILLY 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3490, "barcode": "8699401495090"}, "8699401495106": {"name": "ROSE 2 İŞLEVLİ ŞİŞME BEBEK", "price": 3690, "barcode": "8699401495106"}, "8699401495151": {"name": "LINA LOVE DOLL VAJİNALI ŞİŞME", "price": 4190, "barcode": "8699401495151"}, "8699401495168": {"name": "MARIA LOVE DOLL VAJİNALI ŞİŞME", "price": 4290, "barcode": "8699401495168"}, "8699401495205": {"name": "TATIANA LOVE DOLL VAJİNALI ŞİŞME", "price": 4390, "barcode": "8699401495205"}, "8699401495212": {"name": "NINA LOVE DOLL VAJİNALI ŞİŞME", "price": 4490, "barcode": "8699401495212"}, "8699401495229": {"name": "ANASTASIA LOVE DOLL VAJİNALI ŞİŞME", "price": 4590, "barcode": "8699401495229"}, "8699401495236": {"name": "LENA LOVE DOLL VAJİNALI ŞİŞME", "price": 4690, "barcode": "8699401495236"}, "8699401494581": {"name": "YIWU REALISTIC SISME - XM755", "price": 5750, "barcode": "8699401494581"}, "8699401495267": {"name": "OLGA KALİTELİ ŞİŞME", "price": 5750, "barcode": "8699401495267"}, "8699401495281": {"name": "HELGA KALİTELİ ŞİŞME", "price": 5750, "barcode": "8699401495281"}, "8699401495298": {"name": "SCARLET KALİTELİ ŞİŞME", "price": 5750, "barcode": "8699401495298"}, "8699401495304": {"name": "LOLITA KALİTELİ ŞİŞME", "price": 5750, "barcode": "8699401495304"}, "8699401494758": {"name": "YIWU KALITELI SISME - LM001", "price": 18900, "barcode": "8699401494758"}, "8699401495311": {"name": "EMILY KONUŞAN ŞİŞME BAYAN", "price": 19900, "barcode": "8699401495311"}, "8699401495328": {"name": "VICTORIA KONUŞAN ŞİŞME BAYAN", "price": 21000, "barcode": "8699401495328"}, "8699401495335": {"name": "URSULA KONUŞAN ŞİŞME BAYAN", "price": 21000, "barcode": "8699401495335"}, "8699401495366": {"name": "ANJELICA KONUŞAN ŞİŞME BAYAN", "price": 21000, "barcode": "8699401495366"}, "8699401495373": {"name": "FRANCESCA KONUŞAN ŞİŞME BAYAN", "price": 21000, "barcode": "8699401495373"}, "8699401495403": {"name": "HANNAH KONUŞAN ŞİŞME BAYAN", "price": 21000, "barcode": "8699401495403"}, "8699401494604": {"name": "YIWU VIBRATOR - SV051", "price": 4250, "barcode": "8699401494604"}, "8699401494611": {"name": "YIWU VIBRATOR - XM155", "price": 2750, "barcode": "8699401494611"}, "8699401494628": {"name": "YIWU VIBRATOR - XM156", "price": 2750, "barcode": "8699401494628"}, "8699401494635": {"name": "YIWU VIBRATOR - XM157", "price": 2750, "barcode": "8699401494635"}, "8699401494642": {"name": "YIWU VIBRATOR - XM158", "price": 2750, "barcode": "8699401494642"}, "8699401494659": {"name": "YIWU VIBRATOR - XM159", "price": 2750, "barcode": "8699401494659"}, "8699401494666": {"name": "YIWU VIBRATOR - XM161", "price": 2750, "barcode": "8699401494666"}, "8699401494673": {"name": "YIWU VIBRATOR - XM162", "price": 2750, "barcode": "8699401494673"}, "8699401494680": {"name": "YIWU VIBRATOR - XM163", "price": 2750, "barcode": "8699401494680"}, "8699401494697": {"name": "YIWU VIBRATOR - XM164", "price": 2750, "barcode": "8699401494697"}, "8699401494703": {"name": "YIWU VIBRATOR - XM166", "price": 2750, "barcode": "8699401494703"}, "8699401494710": {"name": "YIWU G-STRING VIBRATOR - XM325", "price": 6750, "barcode": "8699401494710"}, "8699401494727": {"name": "YIWU G-STRING VIBRATOR - XM326", "price": 6750, "barcode": "8699401494727"}, "8699401494734": {"name": "YIWU TEKLİ MOTOR - XM369", "price": 3250, "barcode": "8699401494734"}, "8699401494741": {"name": "YIWU G-STRING VIBRATOR - XM386", "price": 6750, "barcode": "8699401494741"}, "8699401495571": {"name": "FORJİN FANTAZİ FETİSH SET 7'Lİ - 2230", "price": 2750, "barcode": "8699401495571"}, "8699401495564": {"name": "FORJİN FANTAZİ FETİSH SET TAŞLI - 2226", "price": 2750, "barcode": "8699401495564"}, "8699401495731": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 316", "price": 1990, "barcode": "8699401495731"}, "8699401495717": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 380", "price": 1990, "barcode": "8699401495717"}, "8699401495700": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 389", "price": 2200, "barcode": "8699401495700"}, "8699401495694": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 398", "price": 1990, "barcode": "8699401495694"}, "8699401495687": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 399", "price": 1990, "barcode": "8699401495687"}, "8699401495748": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 400", "price": 1990, "barcode": "8699401495748"}, "8699401495755": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 401", "price": 1990, "barcode": "8699401495755"}, "8699401495762": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 402", "price": 1890, "barcode": "8699401495762"}, "8699401495779": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 403", "price": 1890, "barcode": "8699401495779"}, "8699401495786": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 404", "price": 1990, "barcode": "8699401495786"}, "8699401495809": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 406", "price": 1890, "barcode": "8699401495809"}, "8699401495724": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 320", "price": 1890, "barcode": "8699401495724"}, "8699401495847": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 408", "price": 2200, "barcode": "8699401495847"}, "8699401495830": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 409", "price": 2100, "barcode": "8699401495830"}, "8699401495823": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 410", "price": 2200, "barcode": "8699401495823"}, "8699401495670": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 505", "price": 2200, "barcode": "8699401495670"}, "8699401495663": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 508", "price": 2200, "barcode": "8699401495663"}, "8699401495656": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 509", "price": 2100, "barcode": "8699401495656"}, "8699401495649": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 514", "price": 2790, "barcode": "8699401495649"}, "8699401495618": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 761", "price": 1990, "barcode": "8699401495618"}, "8699401495625": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 763", "price": 1990, "barcode": "8699401495625"}, "8699401495632": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 767", "price": 2100, "barcode": "8699401495632"}, "8699401495601": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 784", "price": 2100, "barcode": "8699401495601"}, "8699401495595": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 800", "price": 2100, "barcode": "8699401495595"}, "8699401495588": {"name": "FORJİN FANTAZİ DERİ KOSTÜM - 9002-1", "price": 2450, "barcode": "8699401495588"}, "8699401496189": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3002", "price": 1100, "barcode": "8699401496189"}, "8699401496196": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3003", "price": 1100, "barcode": "8699401496196"}, "8699401496202": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3006", "price": 1100, "barcode": "8699401496202"}, "8699401496219": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3007", "price": 1100, "barcode": "8699401496219"}, "8699401496226": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3008", "price": 1100, "barcode": "8699401496226"}, "8699401496233": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3010", "price": 1100, "barcode": "8699401496233"}, "8699401496240": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3011", "price": 1100, "barcode": "8699401496240"}, "8699401496257": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3013", "price": 1100, "barcode": "8699401496257"}, "8699401496264": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3014", "price": 1100, "barcode": "8699401496264"}, "8699401496271": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3016", "price": 1100, "barcode": "8699401496271"}, "8699401496288": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3018", "price": 1100, "barcode": "8699401496288"}, "8699401496295": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3022", "price": 1100, "barcode": "8699401496295"}, "8699401496301": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3023", "price": 1100, "barcode": "8699401496301"}, "8699401496318": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3024", "price": 1100, "barcode": "8699401496318"}, "8699401496325": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3025", "price": 1100, "barcode": "8699401496325"}, "8699401496332": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3026", "price": 1100, "barcode": "8699401496332"}, "8699401496349": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3027", "price": 1100, "barcode": "8699401496349"}, "8699401496356": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3029", "price": 1100, "barcode": "8699401496356"}, "8699401496363": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3030", "price": 1100, "barcode": "8699401496363"}, "8699401496370": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3032", "price": 1100, "barcode": "8699401496370"}, "8699401496387": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3034", "price": 1100, "barcode": "8699401496387"}, "8699401496394": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3035", "price": 1100, "barcode": "8699401496394"}, "8699401496400": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3037", "price": 1100, "barcode": "8699401496400"}, "8699401496417": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3040", "price": 1100, "barcode": "8699401496417"}, "8699401496424": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3041", "price": 1100, "barcode": "8699401496424"}, "8699401496431": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3043", "price": 1100, "barcode": "8699401496431"}, "8699401496448": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3044", "price": 1100, "barcode": "8699401496448"}, "8699401496455": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3046", "price": 1100, "barcode": "8699401496455"}, "8699401496462": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3047", "price": 1100, "barcode": "8699401496462"}, "8699401496479": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3049", "price": 1100, "barcode": "8699401496479"}, "8699401496486": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3050", "price": 1100, "barcode": "8699401496486"}, "8699401496493": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3051", "price": 1100, "barcode": "8699401496493"}, "8699401496509": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3052", "price": 1100, "barcode": "8699401496509"}, "8699401496516": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3053", "price": 1100, "barcode": "8699401496516"}, "8699401496523": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3055", "price": 1100, "barcode": "8699401496523"}, "8699401496530": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3056", "price": 1100, "barcode": "8699401496530"}, "8699401496547": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3057", "price": 1100, "barcode": "8699401496547"}, "8699401496554": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3058", "price": 1100, "barcode": "8699401496554"}, "8699401496561": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3059", "price": 1100, "barcode": "8699401496561"}, "8699401496578": {"name": "MİSS FELİZ FANTAZİ KOSTÜM - 3060", "price": 1100, "barcode": "8699401496578"}, "4238956478536": {"name": "bıg kaydırıcı", "price": 700, "barcode": "4238956478536"}, "8699401496653": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496653"}, "8699401496646": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496646"}, "8699401496660": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496660"}, "8699401496608": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496608"}, "8699401496592": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496592"}, "8699401496615": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496615"}, "8699401496639": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496639"}, "8699401496622": {"name": "NEW DREAMS KIYAFET", "price": 999, "barcode": "8699401496622"}, "8699401496691": {"name": "MASTÜRBATÖR", "price": 5990, "barcode": "8699401496691"}, "8699401496684": {"name": "UZAKTAN KUMANDALI VİBRATÖR", "price": 4990, "barcode": "8699401496684"}, "8699401496677": {"name": "METAL PLUG PONPON", "price": 1200, "barcode": "8699401496677"}, "8699401496707": {"name": "FORJİN FANTAZİ AKSESUAR - 903", "price": 2790, "barcode": "8699401496707"}, "8699401496714": {"name": "FORJİN FANTAZİ AKSESUAR - 904", "price": 2790, "barcode": "8699401496714"}, "8699401496721": {"name": "FORJİN FANTAZİ AKSESUAR - 905", "price": 2790, "barcode": "8699401496721"}, "8699401496738": {"name": "FORJİN FANTAZİ AKSESUAR - 906", "price": 2790, "barcode": "8699401496738"}, "8699401496745": {"name": "FORJİN FANTAZİ AKSESUAR - 909", "price": 2790, "barcode": "8699401496745"}, "8699401496752": {"name": "FORJİN FANTAZİ AKSESUAR - 912", "price": 2790, "barcode": "8699401496752"}, "8699401496776": {"name": "", "price": 9900, "barcode": "8699401496776"}, "8699401496790": {"name": "", "price": 5990, "barcode": "8699401496790"}, "8699401496806": {"name": "", "price": 6250, "barcode": "8699401496806"}, "8699401496813": {"name": "", "price": 3500, "barcode": "8699401496813"}, "8699401496820": {"name": "", "price": 5990, "barcode": "8699401496820"}, "366993702308": {"name": "VİGA 30LU KAPSÜL", "price": 2990, "barcode": "366993702308"}, "8699401496837": {"name": "Tiger’s – Type-C Şarjlı – Titreşimli ve Vakumlu Otomatik Vajina Mastürbatör", "price": 9249, "barcode": "8699401496837"}, "8699401496844": {"name": "Tiger’s – Type-C Şarjlı – Titreşimli ve Vakumlu Otomatik Vajina Mastürbatör", "price": 9449, "barcode": "8699401496844"}, "8699401496851": {"name": "Tiger’s – Type-C Şarjlı – Titreşimli ve Vakumlu Otomatik Vajina Mastürbatör", "price": 9649, "barcode": "8699401496851"}, "8699401496868": {"name": "Sleeve Penis Pompası İçin Mastürbatör Vajina Başlık", "price": 799, "barcode": "8699401496868"}};
+
+// ── Elemanlar ──
+const scanScreen   = document.getElementById("scan-screen");
+const resultScreen = document.getElementById("result-screen");
+const statusBar    = document.getElementById("status-bar");
+const manualInput  = document.getElementById("manual-input");
+const loading      = document.getElementById("loading");
+
+let scanning = false;
+
+// ── Quagga kamera ──
+function startScanner() {
+  scanning = false;
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: document.getElementById("interactive"),
+      constraints: { facingMode: "environment", width: 1280, height: 720 }
+    },
+    decoder: {
+      readers: ["ean_reader","ean_8_reader","code_128_reader",
+                "code_39_reader","upc_reader","upc_e_reader"]
+    },
+    locate: true
+  }, err => {
+    if (err) {
+      statusBar.textContent = "⚠️ Kamera açılamadı — Manuel giriş kullanın";
+      statusBar.className = "error";
+      return;
+    }
+    Quagga.start();
+    scanning = true;
+    statusBar.textContent = "📷 Kamerayı barkoda tutun";
+    statusBar.className = "";
+  });
+
+  Quagga.onDetected(data => {
+    if (!scanning) return;
+    const code = data.codeResult.code;
+    handleBarcode(code);
+  });
+}
+
+function stopScanner() {
+  try { Quagga.stop(); } catch(e) {}
+  scanning = false;
+}
+
+// ── Barkod işle ──
+function handleBarcode(code) {
+  scanning = false;
+  const product = PRODUCTS[code.trim()];
+  if (product) {
+    showResult(product);
+  } else {
+    statusBar.textContent = "❌ Bulunamadı: " + code;
+    statusBar.className = "error";
+    setTimeout(() => {
+      statusBar.textContent = "📷 Kamerayı barkoda tutun";
+      statusBar.className = "";
+      scanning = true;
+    }, 2500);
+  }
+}
+
+// ── Sonuç göster ──
+function showResult(product) {
+  stopScanner();
+  scanScreen.style.display = "none";
+  resultScreen.style.display = "flex";
+  resultScreen.style.flexDirection = "column";
+
+  document.getElementById("product-name").textContent = product.name || "";
+
+  const price = product.price;
+  document.getElementById("price-amount").textContent =
+    price ? "₺" + parseInt(price).toLocaleString("tr-TR") : "Fiyat yok";
+
+  document.getElementById("barcode-text").textContent = product.barcode || "";
+
+  const img = document.getElementById("product-img");
+  const noImg = document.getElementById("no-img");
+  if (product.image) {
+    img.src = "data:image/png;base64," + product.image;
+    img.style.display = "block";
+    noImg.style.display = "none";
+  } else {
+    img.style.display = "none";
+    noImg.style.display = "block";
+  }
+}
+
+// ── Geri dön ──
+function goBack() {
+  resultScreen.style.display = "none";
+  scanScreen.style.display = "flex";
+  scanScreen.style.flexDirection = "column";
+  startScanner();
+}
+
+document.getElementById("back-btn").onclick = goBack;
+document.getElementById("scan-again-btn").onclick = goBack;
+
+// ── Manuel giriş ──
+manualInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    const val = manualInput.value.trim();
+    if (val) { handleBarcode(val); manualInput.value = ""; }
+  }
+});
+document.getElementById("manual-btn").onclick = () => {
+  const val = manualInput.value.trim();
+  if (val) { handleBarcode(val); manualInput.value = ""; }
+};
+
+// ── Başlat ──
+startScanner();
+</script>
+</body>
+</html>
